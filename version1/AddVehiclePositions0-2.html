@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+       #map {
+        height: 600px;
+        width: 80%;
+       }
+    </style>
+  </head>
+  <body>
+    <h3>Google Maps CTFasTrak Demo</h3>
+    <div id="map"></div>
+    <script>
+	  var theMap;         //our embedded google map
+	  
+      function initMap() {
+        var cent = {lat: 41.635768, lng: -72.787725};
+        theMap = new google.maps.Map(document.getElementById('map'), {
+          zoom: 9,
+          center: cent,
+		  mapTypeId: 'terrain'
+        });
+        
+		refreshBusMarkers();
+      }	  
+	  
+     function readBusData(){
+		var req = new XMLHttpRequest();
+		req.open('GET', 'http://65.213.12.244/realtimefeed/vehicle/vehiclepositions.json', false);
+		req.send(null);
+		
+		if(req.status == 200){
+		  var rawString = req.responseText;
+		
+		  var firstInd = rawString.indexOf(':')+1;
+		  var lastInd = rawString.lastIndexOf(']')+1;
+		  var jsonData = rawString.substring(firstInd, lastInd);
+		  var busData = JSON.parse(jsonData);
+
+		  return busData;
+		}
+	}    
+		
+    function refreshBusMarkers(){
+	  var data = readBusData();
+	  var pos;
+	  var mark;
+	  for (i = 0; i < data.length; i++){
+	    pos = {lat: data[i].vehicle.position.latitude, lng: data[i].vehicle.position.longitude};
+		mark = new google.maps.Marker({
+		  map: theMap,
+		  position: pos,
+		  label: data[i].id
+		});
+	  }
+	}
+      
+
+
+    </script>
+	
+    <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBezkqLyMpXAF9dBb4X5rZeQkyF8Y5_Te4&callback=initMap">
+    </script>
+  </body>
+</html>

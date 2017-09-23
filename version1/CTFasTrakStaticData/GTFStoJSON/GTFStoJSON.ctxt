@@ -1,0 +1,7 @@
+#BlueJ class context
+comment0.target=GTFStoJSON
+comment1.params=
+comment1.target=void\ main()
+comment2.params=inputPath\ outputPath
+comment2.target=void\ convertGTFStoJSON(java.lang.String,\ java.lang.String)
+numComments=3
