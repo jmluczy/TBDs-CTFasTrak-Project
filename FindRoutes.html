@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+       #map {
+        height: 600px;
+        width: 80%;
+       }
+    </style>
+  </head>
+  <body>
+    <h3>Google Maps CTFasTrak Demo</h3>
+    <div id="map"></div>
+	
+	<form name = "userLocation">
+		<table>
+			<tr>
+				<td>Enter current location:</td>
+				<td> <input type=text name=start size=30> <td>
+			</tr>
+			<tr>
+				<td>Enter destination location:</td>
+				<td><input type=text name=end size=30></td>
+			</tr>
+			<tr>
+				<td><input type=button value="GO!" onClick="addUserLocation()"</td>
+			</tr>		
+			<tr>
+				<td><input type=button value="See Busses" onClick="refreshBusMarkers()"</td>
+			</tr>
+			<tr>
+				<td><input type=button value="See Bus Stops Close to Start" onClick="showStopsCloseToStartAndEnd()"></td>
+				<td><input type=text name=distance size = 12></td>				
+			</tr>
+			<tr>
+				<td><input type=button value="Get Route" onClick="displayValidBusTrips()"></td>
+			</tr>
+		</table>
+	</form>
+	
+	<p id="testing"> </p>
+	
+    <script>
+	  var nComp;
+	  var theMap;         //embedded google map
+	  var startPos, endPos;  // LatLng objects to hold user start and destination location
+	  	  
+	function test(){
+		var trips = readRealTimeData(1); 
+		document.getElementById("testing").innerHTML = trips;
+	}
+	
+	  function addUserLocation(){ //takes user entered address from form named userLocation	  
+		var startAddress = document.userLocation.start.value;
+		var endAddress   = document.userLocation.end.value;
+		startAddress = startAddress.replace(" ", "+");
+		endAddress = endAddress.replace(" ", "+");
+		
+		//geocode START location
+		var req = new XMLHttpRequest();
+		req.open('GET', 'https://maps.googleapis.com/maps/api/geocode/json?address=' + startAddress 
+						+ '&key=AIzaSyBezkqLyMpXAF9dBb4X5rZeQkyF8Y5_Te4', false);
+		req.send(null);
+		
+		if(req.status == 200){
+		  var rawString = req.responseText;
+		  var geoData = JSON.parse(rawString);		  
+		  //global... maybe change later
+		  startPos = new google.maps.LatLng(geoData.results[0].geometry.location); //{latitude, longitude}		
+		  //document.getElementById("testing").innerHTML = startPos.lat + " " + startPos.lng;
+		}		
+		//geocode END location
+		req.open('GET', 'https://maps.googleapis.com/maps/api/geocode/json?address=' + endAddress 
+						+ '&key=AIzaSyBezkqLyMpXAF9dBb4X5rZeQkyF8Y5_Te4', false);
+		req.send(null);
+		
+		if(req.status == 200){
+		  var rawString = req.responseText;
+		  var geoData = JSON.parse(rawString);		  
+		  //global... maybe change later
+		  endPos = new google.maps.LatLng(geoData.results[0].geometry.location); //{latitude, longitude}		  
+		}		
+		var startMarker = new google.maps.Marker({
+			map: theMap,
+			position: startPos,
+			label: "YOU ARE HERE!"
+		});		
+		var endMarker = new google.maps.Marker({
+			map: theMap,
+			position: endPos,
+			label: "BUT YOU WANT TO BE HERE!"
+		});		
+	  }
+	  
+	function initMap() {
+		var cent = {lat: 41.635768, lng: -72.787725};
+		theMap = new google.maps.Map(document.getElementById('map'), {
+		  zoom: 9,
+		  center: cent,
+		  mapTypeId: 'terrain' 
+		});        
+		//refreshBusMarkers();
+	}
+	
+	function distance(pos1, pos2){  
+	//both pos1 must be LatLng objects i.e. {lat: double, lng: double}
+		var dist = google.maps.geometry.spherical.computeDistanceBetween(pos1, pos2); //in meters
+		dist = dist / 1609.34; //convert to miles
+		return dist;
+	}
+	
+	//n must be an integer 0, 1, 2, 3 to indicate which of the live data streams to access
+	//will return an object containing the data from the feed specified
+	function readRealTimeData(n){
+		var feedType = ['tripupdate/tripupdates', 'vehicle/vehiclepositions', 'alert/alerts', 'externalfeed/trapezerealtimefeed'];
+		var req = new XMLHttpRequest();
+		req.open('GET', 'http://65.213.12.244/realtimefeed/' + feedType[n] + '.json', false);
+		req.send(null);
+		
+		if(req.status == 200){
+		  var rawString = req.responseText;	
+		  var dataObj = JSON.parse(rawString);
+		  return dataObj;
+		}
+	}
+	
+	//String fileName must be one of ["agency", "calendar", "calendar_dates", "routes", "shapes", "stop_times", "stops", "trips"]
+	//will return an object containing 
+	function readStaticData(fileName){
+		var req = new XMLHttpRequest();
+		req.open('GET', 'https://raw.githubusercontent.com/jmluczy/TBDs-CTFasTrak-Project/master/version1/CTFasTrakStaticData/' + fileName + 'JSON.txt', false);
+		req.send(null);
+		
+		if(req.status == 200){
+		  var jsonString = req.responseText;		
+		  var dataObj = JSON.parse(jsonString);     
+
+		  return dataObj;
+		}
+	}
+	
+	function closeStops(pos, dist){
+		//pos must be a LatLng object
+		//returns an array of bus stop data for those stops within 'dist' miles of 'pos'
+		var stops = readStaticData("stops"); //data from all stops
+		var close = []; //will hold data from close stops
+		var tempLatLng;
+		var str;
+		for (i = 0; i < stops.length; i++){
+			tempLatLng = new google.maps.LatLng(stops[i].stop_lat*1, stops[i].stop_lon*1); //*1 to coerce strings to numbers
+			if ( distance(pos, tempLatLng) < dist){
+				close.push(stops[i]);
+				//str = str + stops[i].stop_name + "<br>" + distance(pos, tempLatLng) + "<br>";
+			}
+		}
+		//document.getElementById("testing").innerHTML = str + "<br>" + close.length;
+		return close;		
+	}
+
+    function refreshBusMarkers(){
+	  var data = readRealTimeData(1).entity; //1 := vehicle positions
+	  for (i = 0; i < data.length; i++){
+	    //pos = new google.maps.LatLng(data.entity[i].vehicle.position.latitude, data.entity[i].vehicle.position.longitude); 
+		new google.maps.Marker({
+		  map: theMap,
+		  position: new google.maps.LatLng( data[i].vehicle.position.latitude*1, data[i].vehicle.position.longitude*1),
+		  label: data[i].id
+		});
+	  }
+	}
+	
+	function showStopsCloseToStartAndEnd(){
+		var dist = document.userLocation.distance.value*1;
+		showCloseBusStopMarkers(startPos, dist);
+		showCloseBusStopMarkers(endPos, dist);
+	}
+	
+	function showCloseBusStopMarkers(LatLngPos, dist){
+		//document.getElementById("testing").innerHTML = "in the show markers method";
+		var stop = closeStops(LatLngPos, dist);
+		//document.getElementById("testing").innerHTML = "number of stops: " + stop.length;
+
+		var tempLatLng;
+		for (i = 0; i < stop.length; i++){
+			tempLatLng = new google.maps.LatLng(stop[i].stop_lat*1, stop[i].stop_lon*1);
+			var stopMarker = new google.maps.Marker({
+				position: tempLatLng,
+				map: theMap,
+				label: stop[i].stop_id,
+				title: stop[i].stop_name
+			});
+			stopMarker.addListener('dblclick', function(){
+				displaySubsequentStops(this.label);
+			})
+		}
+	}      
+	
+	function displaySubsequentStops(stopId){
+		update("displaySubsequentStopsCalled");
+	}
+	
+	function validBusTrips(startStops, endStops){
+		update("Entered: validBusTrips( )");
+		//startStops, endStops BOTH arrays containing bus stops
+		//returns an array containing trip data for a bus trip that goes from a bus stop in startStops to a bus stop in endStops
+		var validTrips = [];  //will hold a data for a valid trip, (if one exists)
+		var allTrips = readRealTimeData(0).entity; //0 := trip updates feed
+		var stops;
+		var startId;
+		var endId;
+		for (t = 0; t < allTrips.length; t++){
+			//update("Entered: outer loop... so far so good");
+			//update(JSON.stringify(allTrips[t]));
+			stops = allTrips[t].trip_update.stop_time_update;
+			//update(JSON.stringify(stops));
+			for (s = 0; s < stops.length; s++){
+				//update("Entered: middle loop. If this is last thing you see, problem is on next line of code");
+				startId = stops[s].stop_id;
+				//update("stop Id is ok");
+				if (stopIdMatches(startId, startStops)){
+					update("valid startId found");
+					for (c = s+1; c < stops.length; c++){
+						endId = stops[c].id;
+						if (stopIdMatches(endId, endStops)){
+							validTrips.push( {trip: allTrips[t], start: startId, end: endId} );
+							update("valid trip FOUND!");
+						}
+					}
+				}
+				else{
+					
+				}
+			}
+		}
+		update("valid trips found: " + validTrips.length);
+		//update("leaving validBusTrips()")
+		
+		return validTrips;
+	}
+	
+	function stopIdMatches(id, closeStops){
+		//id : String;  closeStops: array containing bus stop data
+		//returns true if 'id' matches a 'stop_id' of any of the bus stops in 'closeStops'
+		//update("Entered: stopIdMatches()");
+		for (i = 0; i < closeStops.length; i++){
+			//update("Entered loop of stopIdMatches()");
+			nComp++;
+			if (id === closeStops[i].stop_id){
+				//update("Equality Test Performed");
+				return true;
+			}
+			
+		}
+		//update("Exiting: stopIdMatches()");
+		return false;
+	}
+	
+	function displayValidBusTrips(){
+		nComp = 0;
+		update("Entered: displayValidBusTrips( ) <br>");
+		var dist = document.userLocation.distance.value*1;
+		var startStops = closeStops(startPos, dist);
+		var endStops = closeStops(endPos, dist);
+		update("close start and end stops obtained successfully");
+		var trips = validBusTrips(startStops, endStops);
+		var info = "";
+		for (i = 0; i < trips.length; i++){
+			info = info + "Start stop id: " + trips[i].start + "<br>End stop id: " + trips[i].end + "<br> Trip id: " + trips[i].trip.id + "<br><br>";
+		}
+		update("leaving displayValidBusTrips()");
+		update("Trip Info Below:");
+		update("Number of id comparisons: " + nComp);
+		update("Number of start stops included in search: " + startStops.length);
+		update("Number of end stops included in search: " + endStops.length);
+		update("___________________________________");
+		
+		update(info);
+	}
+	
+	function update(message){
+		var text = document.getElementById("testing").innerHTML;
+		text = text + "<br>" + message;
+		document.getElementById("testing").innerHTML = text;
+	}
+
+	
+    </script>
+	
+    <script async defer
+		src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBezkqLyMpXAF9dBb4X5rZeQkyF8Y5_Te4&libraries=geometry&callback=initMap">
+	</script>
+  </body>
+</html>
